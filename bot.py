@@ -1,18 +1,32 @@
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, CallbackQueryHandler
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, User
+from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, CallbackQueryHandler, filters
 from dotenv import dotenv_values
-
-config = dotenv_values(".env")
+import json
 
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
+config = dotenv_values(".env")
+with open("thread_members.json", "r") as file:
+    data : dict[int, dict] = json.load(file)
+    filter_registered = filters.Chat(map(int, data["members"].keys()))
+    filter_pending = filters.Chat(map(int, data["pending"].keys()))
+    
+
+def save_entry(chat_id: int, entry_type: str):
+    usr = User(chat_id, "user", False)
+    data[entry_type][chat_id] = {
+        "username": usr.username,
+        "name": usr.full_name,
+    }
+    with open("thread_members.json", "w") as file:
+        json.dump(data, file)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = "Привет! Если ты это читаешь, значит бот сейчас в активной разработке! :)\nИспользуй команду /register, чтобы отправить заявку на доступ к нитевским мероприятиям"
+    msg = "Привет! Если ты это читаешь, значит бот сейчас в активной разработке! :)"
     await context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
 
 async def register(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -31,18 +45,19 @@ async def register(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # await ticket.reply_text("Выберете действие:", reply_markup=markup)
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Parses the CallbackQuery and updates the message text."""
     query = update.callback_query
 
     # CallbackQueries need to be answered, even if no notification to the user is needed
     # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
     await query.answer()
-
+    
     if query.data.startswith("accept"):
         _, usr, name, chat_id = query.data.split(";")
-        await query.edit_message_text(text=f"@{usr} - {name} зарегистрирован(а)!")
+        await query.edit_message_text(text=f"@{usr} - {name} зарегистрирован(а)! Проверил(а): {query.from_user.username}")
         msg = "Поздравляем! Вам теперь доступны меропирятия Нити!"
         await context.bot.send_message(chat_id, text=msg)
+        save_entry(chat_id, "members")
+        filter_registered.add_chat_ids(chat_id)
     elif query.data.startswith("decline"):
         _, chat_id = query.data.split(";")
         await query.delete_message()
@@ -51,9 +66,9 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 if __name__ == '__main__':
     application = ApplicationBuilder().token(f'{config["TOKEN"]}').build()
-    
+
     start_handler = CommandHandler('start', start)
-    register_handler = CommandHandler('register', register)
+    register_handler = CommandHandler('register', register, ~filter_registered & ~filter_pending)
     application.add_handler(start_handler)
     application.add_handler(register_handler)
     application.add_handler(CallbackQueryHandler(button))
