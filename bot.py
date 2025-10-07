@@ -1,8 +1,10 @@
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, User
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, CallbackQueryHandler, filters
 from dotenv import dotenv_values
 import json
+
+from dynamic_filter import RegisterFilter
 
 
 logging.basicConfig(
@@ -12,16 +14,21 @@ logging.basicConfig(
 config = dotenv_values(".env")
 with open("thread_members.json", "r") as file:
     data : dict[int, dict] = json.load(file)
-    filter_registered = filters.Chat(map(int, data["members"].keys()))
-    filter_pending = filters.Chat(map(int, data["pending"].keys()))
-    
+    members = set(map(int, data["members"].keys()))
+    pending = set(map(int, data["pending"].keys()))
+    filter_registered = RegisterFilter(members, pending)
+filter_owner = filters.Chat(int(config["OWNER"]))
 
-def save_entry(chat_id: int, entry_type: str):
-    usr = User(chat_id, "user", False)
-    data[entry_type][chat_id] = {
-        "username": usr.username,
-        "name": usr.full_name,
+def save_entry(entry_type: str, chat_id: int | str, username: str, name: str):
+    data[entry_type][int(chat_id)] = {
+        "username": "@" + username,
+        "name": name,
     }
+    with open("thread_members.json", "w") as file:
+        json.dump(data, file)
+
+def delete_entry(entry_type: str, chat_id: int | str):
+    data[entry_type].pop(int(chat_id))
     with open("thread_members.json", "w") as file:
         json.dump(data, file)
 
@@ -30,10 +37,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
 
 async def register(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = "Ваша заявка отправлена на рассмотрение! Ожидайте в скором времени получить полный доступ к мероприятиям Нити!"
     usr = update.effective_user.username
     name = update.effective_user.full_name
     chat_id = update.effective_chat.id
+    if not filter_registered.check_update(update):
+        await context.bot.send_message(chat_id, "Вы не можете отправить еще одну заявку")
+        return
+    
+    msg = "Ваша заявка отправлена на рассмотрение! Ожидайте в скором времени получить полный доступ к мероприятиям Нити!"
     await context.bot.send_message(chat_id, text=msg)
     keyboard = [
         [InlineKeyboardButton("Принять", callback_data=f"accept;{usr};{name};{chat_id}")],
@@ -42,7 +53,7 @@ async def register(update: Update, context: ContextTypes.DEFAULT_TYPE):
     markup = InlineKeyboardMarkup(keyboard)
     msg = f"@{usr} - {name} хочет получить доступ к мероприятиям Нити"
     await context.bot.send_message(chat_id=int(config["ADMIN_CHANNEL_ID"]), text=msg, reply_markup=markup)
-    # await ticket.reply_text("Выберете действие:", reply_markup=markup)
+    save_entry("pending", chat_id, usr, name)
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
@@ -53,14 +64,16 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     
     if query.data.startswith("accept"):
         _, usr, name, chat_id = query.data.split(";")
-        await query.edit_message_text(text=f"@{usr} - {name} зарегистрирован(а)! Проверил(а): {query.from_user.username}")
+        await query.edit_message_text(text=f"@{usr} - {name} зарегистрирован(а)!\nПроверил(а): @{query.from_user.username}")
         msg = "Поздравляем! Вам теперь доступны меропирятия Нити!"
         await context.bot.send_message(chat_id, text=msg)
-        save_entry(chat_id, "members")
-        filter_registered.add_chat_ids(chat_id)
+        save_entry("members", chat_id, usr, name)
+        delete_entry("pending", chat_id)
+        filter_registered.add_member(chat_id)
     elif query.data.startswith("decline"):
         _, chat_id = query.data.split(";")
         await query.delete_message()
+        delete_entry("pending", chat_id)
         msg = "Ваша заявка была отклонена. Если вы считаете это ошибкой, напишите @damirablv"
         await context.bot.send_message(chat_id, text=msg)
 
@@ -68,7 +81,7 @@ if __name__ == '__main__':
     application = ApplicationBuilder().token(f'{config["TOKEN"]}').build()
 
     start_handler = CommandHandler('start', start)
-    register_handler = CommandHandler('register', register, ~filter_registered & ~filter_pending)
+    register_handler = CommandHandler('register', register)
     application.add_handler(start_handler)
     application.add_handler(register_handler)
     application.add_handler(CallbackQueryHandler(button))
