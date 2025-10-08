@@ -2,7 +2,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import filters
 
 from custom_context import CustomContext
-from dynamic_filter import RegisterFilter
+from dynamic_filter import MemberFilter, PendingFilter
 
 
 async def start(update: Update, context: CustomContext):
@@ -15,7 +15,7 @@ async def register(update: Update, context: CustomContext):
     usr = update.effective_user.username
     name = update.effective_user.full_name
     chat_id = update.effective_chat.id
-    filter_can_register = RegisterFilter(context.database)
+    filter_can_register = ~MemberFilter(context.database) & ~PendingFilter(context.database)
     if not filter_can_register.check_update(update):
         await context.bot.send_message(chat_id, "Вы не можете отправить еще одну заявку")
         return
