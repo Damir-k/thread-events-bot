@@ -1,89 +1,23 @@
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, CallbackQueryHandler, filters
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 from dotenv import dotenv_values
-import json
 
-from dynamic_filter import RegisterFilter
-
+from handlers import start, register, inline_button
+from custom_context import CustomContext
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
-config = dotenv_values(".env")
-with open("thread_members.json", "r") as file:
-    data : dict[int, dict] = json.load(file)
-    members = set(map(int, data["members"].keys()))
-    pending = set(map(int, data["pending"].keys()))
-    filter_registered = RegisterFilter(members, pending)
-filter_owner = filters.Chat(int(config["OWNER"]))
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
-def save_entry(entry_type: str, chat_id: int | str, username: str, name: str):
-    data[entry_type][int(chat_id)] = {
-        "username": "@" + username,
-        "name": name,
-    }
-    with open("thread_members.json", "w") as file:
-        json.dump(data, file)
-
-def delete_entry(entry_type: str, chat_id: int | str):
-    data[entry_type].pop(int(chat_id))
-    with open("thread_members.json", "w") as file:
-        json.dump(data, file)
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = "Привет! Если ты это читаешь, значит бот сейчас в активной разработке! :)"
-    await context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
-
-async def register(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    usr = update.effective_user.username
-    name = update.effective_user.full_name
-    chat_id = update.effective_chat.id
-    if not filter_registered.check_update(update):
-        await context.bot.send_message(chat_id, "Вы не можете отправить еще одну заявку")
-        return
-    
-    msg = "Ваша заявка отправлена на рассмотрение! Ожидайте в скором времени получить полный доступ к мероприятиям Нити!"
-    await context.bot.send_message(chat_id, text=msg)
-    keyboard = [
-        [InlineKeyboardButton("Принять", callback_data=f"accept;{usr};{name};{chat_id}")],
-        [InlineKeyboardButton("Отклонить", callback_data=f"decline;{chat_id}")]
-    ]
-    markup = InlineKeyboardMarkup(keyboard)
-    msg = f"@{usr} - {name} хочет получить доступ к мероприятиям Нити"
-    await context.bot.send_message(chat_id=int(config["ADMIN_CHANNEL_ID"]), text=msg, reply_markup=markup)
-    save_entry("pending", chat_id, usr, name)
-
-async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-
-    # CallbackQueries need to be answered, even if no notification to the user is needed
-    # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
-    await query.answer()
-    
-    if query.data.startswith("accept"):
-        _, usr, name, chat_id = query.data.split(";")
-        await query.edit_message_text(text=f"@{usr} - {name} зарегистрирован(а)!\nПроверил(а): @{query.from_user.username}")
-        msg = "Поздравляем! Вам теперь доступны меропирятия Нити!"
-        await context.bot.send_message(chat_id, text=msg)
-        save_entry("members", chat_id, usr, name)
-        delete_entry("pending", chat_id)
-        filter_registered.add_member(chat_id)
-    elif query.data.startswith("decline"):
-        _, chat_id = query.data.split(";")
-        await query.delete_message()
-        delete_entry("pending", chat_id)
-        msg = "Ваша заявка была отклонена. Если вы считаете это ошибкой, напишите @damirablv"
-        await context.bot.send_message(chat_id, text=msg)
-
+TOKEN = dotenv_values(".env")["TOKEN"]
 if __name__ == '__main__':
-    application = ApplicationBuilder().token(f'{config["TOKEN"]}').build()
+    context_types = ContextTypes(context=CustomContext)
+    application = ApplicationBuilder().token(f'{TOKEN}').context_types(context_types).build()
 
-    start_handler = CommandHandler('start', start)
-    register_handler = CommandHandler('register', register)
-    application.add_handler(start_handler)
-    application.add_handler(register_handler)
-    application.add_handler(CallbackQueryHandler(button))
+    application.add_handler(CommandHandler('start', start))
+    application.add_handler(CommandHandler('register', register))
+    application.add_handler(CallbackQueryHandler(inline_button))
     
     application.run_polling()

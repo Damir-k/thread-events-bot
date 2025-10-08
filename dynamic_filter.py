@@ -1,18 +1,14 @@
 from telegram.ext import filters
+from database import Database
 
 class RegisterFilter(filters.MessageFilter):
-    def __init__(self, members: set[int], pending: set[int], name = None, data_filter = False):
+    def __init__(self, database: Database, name = None, data_filter = False):
         super().__init__(name, data_filter)
-        self.members = members
-        self.pending = pending
+        self.database = database
     
     def filter(self, message):
         usr_id = message.from_user.id
-        return usr_id not in self.members and usr_id not in self.pending
+        members = set(map(int, self.database.data["members"].keys()))
+        pending = set(map(int, self.database.data["pending"].keys()))
+        return usr_id not in members and usr_id not in pending
     
-    def add_member(self, chat_id : int | str):
-        self.members.add(int(chat_id))
-    
-    def add_pending(self, chat_id : int | str):
-        self.pending.add(int(chat_id))
-
