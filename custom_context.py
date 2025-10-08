@@ -10,7 +10,3 @@ class CustomContext(CallbackContext[ExtBot, dict, None, dict]):
         super().__init__(application, chat_id, user_id)
         self.config = dotenv_values(".env")
         self.database = Database("thread_members.json")
-
-    @classmethod
-    def from_update(cls, update, application):
-        return super().from_update(update, application)

@@ -1,10 +1,13 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import filters
 
 from custom_context import CustomContext
 from dynamic_filter import RegisterFilter
 
 
 async def start(update: Update, context: CustomContext):
+    user = update.effective_user
+    context.database.save_id(user.username, user.id)
     msg = "Привет! Если ты это читаешь, значит бот сейчас в активной разработке! :)"
     await context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
 
@@ -47,3 +50,44 @@ async def inline_button(update: Update, context: CustomContext) -> None:
         context.database.delete_entry("pending", chat_id)
         msg = "Ваша заявка была отклонена. Если вы считаете это ошибкой, напишите @damirablv"
         await context.bot.send_message(chat_id, text=msg)
+
+async def admin(update: Update, context: CustomContext) -> None:
+    if not filters.Chat(int(context.config["OWNER"])).check_update(update):
+        await update.effective_message.reply_text("Нет прав администратора бота")
+        return
+    
+    args = context.args
+    if not args:
+        msg = "Использование:\n`/admin <add/remove> <table> <username>`\n`/admin <print/remove> <table>`"
+        await update.effective_message.reply_text(msg)
+        return
+
+    if args[0] == "add":
+        if len(args) == 3:
+            _, table, username = args
+            chat_id = context.database.data["ids"][username.strip("@")]
+            name = (await context.bot.get_chat(chat_id)).full_name
+            context.database.save_entry(table, chat_id, username.strip("@"), name)
+            await update.effective_message.reply_text(f"{username} - {name} добавлен(а) к {table}")
+            return
+    if args[0] == "print":
+        if len(args) == 2:
+            _, table = args
+            await update.effective_message.reply_text(f"```{context.database.data[table]}```")
+            return
+    if args[0] == "remove":
+        if len(args) == 2:
+            _, table = args
+            context.database.data[table] = dict()
+            await update.effective_message.reply_text(f"{table} удалена")
+            return
+        if len(args) == 3:
+            _, table, username = args
+            chat_id = context.database.data["ids"][username.strip("@")]
+            context.database.delete_entry(table, chat_id)
+            await update.effective_message.reply_text(f"{username} - {name} удален(а) из {table}")
+            return
+    
+    msg = "Использование:\n`/admin <add/remove> <table> <username>`\n`/admin <print/remove> <table>`"
+    await update.effective_message.reply_text(msg)
+    return

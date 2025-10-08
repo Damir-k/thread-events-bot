@@ -11,15 +11,21 @@ class Database:
         if "pending" not in self.data:
             self.data["pending"] = dict()
 
+    def save(self):
+        with open(self.filename, "w") as file:
+            json.dump(self.data, file, indent=4)
+
     def save_entry(self, entry_type: str, chat_id: int | str, username: str, name: str):
         self.data[entry_type][str(chat_id)] = {
             "username": "@" + username,
             "name": name,
         }
-        with open(self.filename, "w") as file:
-            json.dump(self.data, file)
+        self.save()
 
     def delete_entry(self, entry_type: str, chat_id: int | str):
         self.data[entry_type].pop(str(chat_id))
-        with open(self.filename, "w") as file:
-            json.dump(self.data, file)
+        self.save()
+    
+    def save_id(self, username, chat_id):
+        self.data["ids"][username] = chat_id
+        self.save()
