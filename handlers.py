@@ -1,4 +1,5 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.constants import ParseMode
 from telegram.ext import filters
 
 from custom_context import CustomContext
@@ -8,8 +9,14 @@ from dynamic_filter import MemberFilter, PendingFilter
 async def start(update: Update, context: CustomContext):
     user = update.effective_user
     context.database.save_id(user.username, user.id)
-    msg = "Привет! Если ты это читаешь, значит бот сейчас в активной разработке! :)"
-    await context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
+    status = context.get_user_status(user.id)
+    number_events = len(context.get_events(user.id))
+    badge = context.get_badge(number_events)
+    msg = f"<b>Привет! Если ты это читаешь, значит бот сейчас в активной разработке! :)</b> \
+    \n<b>Статус:</b> {status} \
+    \n<b>Мероприятия:</b> {number_events} {badge} \
+    \n - Создать новое мероприятие: /new_event"
+    await update.effective_message.reply_text(text=msg, parse_mode=ParseMode.HTML)
 
 async def register(update: Update, context: CustomContext):
     usr = update.effective_user.username
@@ -56,38 +63,62 @@ async def admin(update: Update, context: CustomContext) -> None:
         await update.effective_message.reply_text("Нет прав администратора бота")
         return
     
+    help_msg = "Использование `/admin`:\n \
+        `/admin <add/remove> <table> <username>`\n \
+        `/admin <print/remove> <table>`\n \
+        `/admin <print>`"
     args = context.args
     if not args:
-        msg = "Использование:\n`/admin <add/remove> <table> <username>`\n`/admin <print/remove> <table>`"
-        await update.effective_message.reply_text(msg)
+        await update.effective_message.reply_text(help_msg, parse_mode=ParseMode.MARKDOWN_V2)
         return
 
     if args[0] == "add":
         if len(args) == 3:
             _, table, username = args
-            chat_id = context.database.data["ids"][username.strip("@")]
-            name = (await context.bot.get_chat(chat_id)).full_name
-            context.database.save_entry(table, chat_id, username.strip("@"), name)
-            await update.effective_message.reply_text(f"{username} - {name} добавлен(а) к {table}")
+            if username.strip("@") not in context.database.data["ids"]:
+                msg = f"{username} не существует в таблице ids!"
+            else:
+                chat_id = context.database.data["ids"][username.strip("@")]
+                name = (await context.bot.get_chat(chat_id)).full_name
+                context.database.save_entry(table, chat_id, username.strip("@"), name)
+                msg = f"{username} - {name} добавлен(а) к {table}"
+            await update.effective_message.reply_text(msg)
             return
     if args[0] == "print":
+        if len(args) == 1:
+            await update.effective_message.reply_text(
+                f"Доступные таблицы:\n```json\n{list(context.database.data.keys())}```", 
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+            return
         if len(args) == 2:
             _, table = args
-            await update.effective_message.reply_text(f"```{context.database.data[table]}```")
+            await update.effective_message.reply_text(
+                f"Таблица `{table}`:\n```json\n{context.database.data[table]}```", 
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
             return
     if args[0] == "remove":
-        if len(args) == 2:
-            _, table = args
-            context.database.data[table] = dict()
-            await update.effective_message.reply_text(f"{table} удалена")
-            return
+        # if len(args) == 2:
+        #     _, table = args
+        #     if table not in context.database.data:
+        #         msg = "Такой таблицы не существует. `/admin print` для списка таблиц"
+        #     else:
+        #         context.database.data[table] = dict()
+        #         msg = f"`{table}` удалена"
+        #     await update.effective_message.reply_text(msg, parse_mode=ParseMode.MARKDOWN_V2)
+        #     return
         if len(args) == 3:
             _, table, username = args
-            chat_id = context.database.data["ids"][username.strip("@")]
-            context.database.delete_entry(table, chat_id)
-            await update.effective_message.reply_text(f"{username} - {name} удален(а) из {table}")
+            if username.strip("@") not in context.database.data["ids"]:
+                msg = f"{username} не существует в таблице ids!"
+            else:
+                chat_id = context.database.data["ids"][username.strip("@")]
+                name = (await context.bot.get_chat(chat_id)).full_name
+                context.database.delete_entry(table, chat_id)
+                msg = f"{username} - {name} удален(а) из {table}"
+            await update.effective_message.reply_text(msg)
             return
     
-    msg = "Использование:\n`/admin <add/remove> <table> <username>`\n`/admin <print/remove> <table>`"
-    await update.effective_message.reply_text(msg)
+    await update.effective_message.reply_text(help_msg, parse_mode=ParseMode.MARKDOWN_V2)
     return
