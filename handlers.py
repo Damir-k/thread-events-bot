@@ -1,9 +1,12 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import (Update, InlineKeyboardButton, InlineKeyboardMarkup, 
+    InlineQueryResultArticle, InputTextMessageContent, InlineQueryResultsButton)
 from telegram.constants import ParseMode
 from telegram.ext import filters
 
 from custom_context import CustomContext
 from dynamic_filter import MemberFilter, PendingFilter
+
+from uuid import uuid4
 
 
 async def start(update: Update, context: CustomContext):
@@ -122,3 +125,30 @@ async def admin(update: Update, context: CustomContext) -> None:
     
     await update.effective_message.reply_text(help_msg, parse_mode=ParseMode.MARKDOWN_V2)
     return
+
+async def inline_sharing(update: Update, context: CustomContext):
+    if not MemberFilter(context.database).check_update(update):
+        await update.inline_query.answer([], is_personal=True, cache_time=60, button=InlineQueryResultsButton(
+            "Зарегистрироваться в боте...",
+            start_parameter="register"
+        ))
+        return
+
+    query = update.inline_query.query
+    if not query:
+        results = [InlineQueryResultArticle(
+            id=str(uuid4()),
+            title=f'Мероприятие {i}',
+            input_message_content=InputTextMessageContent(f"Хорошее меро №{i}")
+        )      
+        for i in range(1,5)]
+    else:
+        results = []
+        results.append(
+            InlineQueryResultArticle(
+                id=str(uuid4()),
+                title='Создать новое мероприятие...',
+                input_message_content=InputTextMessageContent(f"Новое меро: {query}")
+            )
+        )
+    await context.bot.answer_inline_query(update.inline_query.id, results, is_personal=True)
