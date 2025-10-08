@@ -5,6 +5,7 @@ from telegram.ext import filters
 
 from custom_context import CustomContext
 from dynamic_filter import MemberFilter, PendingFilter
+from callback_types import RegisterVerdict
 
 from uuid import uuid4
 
@@ -13,53 +14,78 @@ async def start(update: Update, context: CustomContext):
     user = update.effective_user
     context.database.save_id(user.username, user.id)
     status = context.get_user_status(user.id)
-    number_events = len(context.get_events(user.id))
-    badge = context.get_badge(number_events)
-    msg = f"<b>Привет! Если ты это читаешь, значит бот сейчас в активной разработке! :)</b> \
-    \n<b>Статус:</b> {status} \
-    \n<b>Мероприятия:</b> {number_events} {badge} \
-    \n - Создать новое мероприятие: /new_event"
-    await update.effective_message.reply_text(text=msg, parse_mode=ParseMode.HTML)
+    msg = f"<b>Привет! Если ты это читаешь, значит бот сейчас в активной разработке! :)</b>"
+    msg += f"\n<b>Статус:</b> {status}"
+    keyboard = []
+    if (~MemberFilter(context.database) & ~PendingFilter(context.database)).check_update(update):
+        keyboard.append([InlineKeyboardButton(
+            "Зарегистрироваться", 
+            callback_data="register"
+        )])
+    if MemberFilter(context.database).check_update(update):
+        number_events = len(context.get_events(user.id))
+        badge = context.get_badge(number_events)
+        msg += f"\n<b>Мероприятия:</b> {number_events} {badge}"
+        msg += f"\n - Создать новое мероприятие: /new_event"
+        msg += f"\n - Список мероприятий: /list_events"
+        keyboard.append([InlineKeyboardButton(
+            "Создать новое мероприятие",
+            callback_data="new_event"
+        ), InlineKeyboardButton(
+            "Список мероприятий",
+            callback_data="list_events"
+        )])
+    markup = InlineKeyboardMarkup(keyboard)
+    await update.effective_message.reply_text(text=msg, parse_mode=ParseMode.HTML, reply_markup=markup)
 
 async def register(update: Update, context: CustomContext):
-    usr = update.effective_user.username
-    name = update.effective_user.full_name
-    chat_id = update.effective_chat.id
-    filter_can_register = ~MemberFilter(context.database) & ~PendingFilter(context.database)
-    if not filter_can_register.check_update(update):
-        await context.bot.send_message(chat_id, "Вы не можете отправить еще одну заявку")
+    user_id = update.effective_user.id
+    if PendingFilter(context.database).check_update(update):
+        await context.bot.send_message(user_id, "Ваша заявка рассматривается! Подождите, пожалуйста")
+        return
+    if MemberFilter(context.database).check_update(update):
+        await context.bot.send_message(user_id, "Вы уже зарегистрированы! /start для главного меню")
         return
     
-    msg = "Ваша заявка отправлена на рассмотрение! Ожидайте в скором времени получить полный доступ к мероприятиям Нити!"
-    await context.bot.send_message(chat_id, text=msg)
-    keyboard = [
-        [InlineKeyboardButton("Принять", callback_data=f"accept;{usr};{name};{chat_id}")],
-        [InlineKeyboardButton("Отклонить", callback_data=f"decline;{chat_id}")]
-    ]
+    if update.callback_query:
+        await update.callback_query.edit_message_reply_markup(None)
+        await update.callback_query.answer("Заявка отправлена!")
+    else:
+        msg = "Ваша заявка отправлена на рассмотрение! Ожидайте в скором времени получить полный доступ к мероприятиям Нити!"
+        await context.bot.send_message(user_id, text=msg)
+    
+    # отправляем тикет в канал
+    username = update.effective_user.username
+    name = update.effective_user.full_name
+    keyboard = [[
+        InlineKeyboardButton("Принять", callback_data=RegisterVerdict(user_id, accept=True)),
+        InlineKeyboardButton("Отклонить", callback_data=RegisterVerdict(user_id, accept=False))
+    ]]
     markup = InlineKeyboardMarkup(keyboard)
-    msg = f"@{usr} - {name} хочет получить доступ к мероприятиям Нити"
+    msg = f"@{username} - {name} хочет получить доступ к мероприятиям Нити"
     await context.bot.send_message(chat_id=int(context.config["ADMIN_CHANNEL_ID"]), text=msg, reply_markup=markup)
-    context.database.save_entry("pending", chat_id, usr, name)
+    context.database.save_entry("pending", user_id, username, name)
 
-async def inline_button(update: Update, context: CustomContext) -> None:
+async def register_verdict(update: Update, context: CustomContext) -> None:
     query = update.callback_query
     # CallbackQueries need to be answered, even if no notification to the user is needed
     # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
     await query.answer()
-    
-    if query.data.startswith("accept"):
-        _, usr, name, chat_id = query.data.split(";")
-        await query.edit_message_text(text=f"@{usr} - {name} зарегистрирован(а)!\nПроверил(а): @{query.from_user.username}")
+
+    db = context.database
+    user_id = str(query.data.user_id)
+    username = db.data["pending"][user_id]["username"]
+    name = db.data["pending"][user_id]["name"]
+    if query.data.accept:
+        db.data["members"][user_id] = db.data["pending"][user_id]
+        db.save()
+        await query.edit_message_text(text=f"{username} - {name} зарегистрирован(а)! ✅\nПроверил(а): @{query.from_user.username}")
         msg = "Поздравляем! Вам теперь доступны меропирятия Нити!"
-        await context.bot.send_message(chat_id, text=msg)
-        context.database.save_entry("members", chat_id, usr, name)
-        context.database.delete_entry("pending", chat_id)
-    elif query.data.startswith("decline"):
-        _, chat_id = query.data.split(";")
-        await query.delete_message()
-        context.database.delete_entry("pending", chat_id)
-        msg = "Ваша заявка была отклонена. Если вы считаете это ошибкой, напишите @damirablv"
-        await context.bot.send_message(chat_id, text=msg)
+    else:
+        await query.edit_message_text(text=f"Заявка {username} - {name} отклонена! ❌\nПроверил(а): @{query.from_user.username}")
+        msg = "Ваша заявка была отклонена. Если вы считаете это ошибкой, подайте её заново"
+    db.delete_entry("pending", user_id)
+    await context.bot.send_message(user_id, text=msg)
 
 async def admin(update: Update, context: CustomContext) -> None:
     if not filters.Chat(int(context.config["OWNER"])).check_update(update):
@@ -152,3 +178,9 @@ async def inline_sharing(update: Update, context: CustomContext):
             )
         )
     await context.bot.answer_inline_query(update.inline_query.id, results, is_personal=True)
+
+async def new_event(update: Update, context: CustomContext):
+    pass
+
+async def invalid_callback(update: Update, context: CustomContext):
+    await update.callback_query.edit_message_reply_markup(None)
