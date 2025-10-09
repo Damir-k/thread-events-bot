@@ -6,7 +6,7 @@ from dotenv import dotenv_values
 from typing import Literal, Tuple, Any
 
 from handlers import (start, register, register_verdict, 
-    admin, inline_sharing, new_event, invalid_callback)
+    admin, inline_sharing, new_event, invalid_callback, list_events)
 from custom_context import CustomContext
 from callback_types import RegisterVerdict
 
@@ -34,6 +34,9 @@ if __name__ == '__main__':
 
     application.add_handler(CommandHandler("new_event", new_event))
     application.add_handler(CallbackQueryHandler(new_event, pattern=r"^new_event$"))
+
+    application.add_handler(CommandHandler("list_events", list_events))
+    application.add_handler(CallbackQueryHandler(list_events, pattern=r"^list_events$"))
 
     application.add_handler(CallbackQueryHandler(register_verdict, RegisterVerdict))
     application.add_handler(CallbackQueryHandler(invalid_callback, InvalidCallbackData))

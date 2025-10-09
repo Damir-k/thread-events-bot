@@ -10,6 +10,8 @@ class Database:
             self.data["members"] = dict()
         if "pending" not in self.data:
             self.data["pending"] = dict()
+        if "events" not in self.data:
+            self.data["events"] = dict()
 
     def save(self):
         with open(self.filename, "w") as file:
@@ -19,6 +21,7 @@ class Database:
         self.data[entry_type][str(chat_id)] = {
             "username": "@" + username,
             "name": name,
+            "events": []
         }
         self.save()
 
