@@ -1,7 +1,18 @@
 from telegram.ext import CallbackContext, ExtBot
-from database import Database
-from dotenv import dotenv_values
 
+from dotenv import dotenv_values
+from enum import Enum
+from datetime import date
+
+from database import Database
+
+class State(Enum):
+    EVENT_NAME = 1
+    LOCATION = 2
+    DATE_TIME = 3
+    DESCRIPTION = 4
+    CONFIRM_EVENT = 5
+    EXPIRATION_DATE = 6
 
 class CustomContext(CallbackContext[ExtBot, dict, None, dict]):
     """Custom class for context."""
@@ -17,8 +28,25 @@ class CustomContext(CallbackContext[ExtBot, dict, None, dict]):
             return "На рассмотрении 🕞"
         return "Неизвестный ❓ \n - Подайте заявку через /register"
 
-    def get_events(self, chat_id) -> list[str]:
-        return []
+    def event_accessible(self, event_id: int | str, chat_id: int | str) -> bool:
+        event = self.database.data["events"][str(event_id)]
+        expired = date.fromisoformat(event["expiration_date"]) < date.today()
+        if expired and event["status"] != "expired":
+            self.database.data["events"][str(event_id)]["status"] = "expired"
+            self.database.save()
+        is_author = event["author"] == int(chat_id)
+        is_active = event["status"] == "active"
+        return (is_author) or (is_active and not expired)
+
+    def get_events(self, chat_id, filter_available=True) -> dict[str, dict]:
+        events = self.database.data["events"]
+        if not filter_available:
+            return events
+        accessible_events = filter(
+            lambda x: self.event_accessible(x[0], chat_id), 
+            events.items()
+        )
+        return dict(accessible_events)
     
     @staticmethod
     def get_badge(events: int) -> str:

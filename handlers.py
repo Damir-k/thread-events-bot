@@ -5,7 +5,7 @@ from telegram.constants import ParseMode
 from telegram.ext import filters
 
 from custom_context import CustomContext
-from dynamic_filter import MemberFilter, PendingFilter
+from dynamic_filters import MemberFilter, PendingFilter
 from callback_types import RegisterVerdict
 
 from uuid import uuid4
@@ -64,7 +64,7 @@ async def register(update: Update, context: CustomContext):
     ]]
     markup = InlineKeyboardMarkup(keyboard)
     msg = f"@{username} - {name} хочет получить доступ к мероприятиям Нити"
-    await context.bot.send_message(chat_id=int(context.config["ADMIN_CHANNEL_ID"]), text=msg, reply_markup=markup)
+    await context.bot.send_message(chat_id=int(context.config["ADMIN_CHAT_ID"]), text=msg, reply_markup=markup)
     context.database.save_entry("pending", user_id, username, name)
 
 async def register_verdict(update: Update, context: CustomContext) -> None:
@@ -81,7 +81,7 @@ async def register_verdict(update: Update, context: CustomContext) -> None:
         db.data["members"][user_id] = db.data["pending"][user_id]
         db.save()
         await query.edit_message_text(text=f"{username} - {name} зарегистрирован(а)! ✅\nПроверил(а): @{query.from_user.username}")
-        msg = "Поздравляем! Вам теперь доступны меропирятия Нити!"
+        msg = "Поздравляем! Вам теперь доступны мероприятия Нити!"
     else:
         await query.edit_message_text(text=f"Заявка {username} - {name} отклонена! ❌\nПроверил(а): @{query.from_user.username}")
         msg = "Ваша заявка была отклонена. Если вы считаете это ошибкой, подайте её заново"
@@ -180,23 +180,6 @@ async def inline_sharing(update: Update, context: CustomContext):
         )
     await context.bot.answer_inline_query(update.inline_query.id, results, is_personal=True)
 
-async def new_event(update: Update, context: CustomContext):
-    db = context.database
-    if not MemberFilter(context.database).check_update(update):
-        await update.effective_message.reply_text("Зарегистрируйтесь через /register, чтобы создать мероприятие")
-        return
-    event_id = uuid4()
-    user_id = str(update.effective_user.id)
-    db.data["events"][event_id] = {"author": user_id}
-    db.data["members"][user_id]["events"].append(event_id)
-
-    await update.effective_user.send_message("Введите название мероприятия:")
-
-async def list_events(update: Update, context: CustomContext):
-    if not MemberFilter(context.database).check_update(update):
-        await update.effective_message.reply_text("Зарегистрируйтесь через /register, чтобы создать мероприятие")
-        return
-    
 
 async def invalid_callback(update: Update, context: CustomContext):
     await update.callback_query.edit_message_reply_markup(None)
