@@ -9,7 +9,17 @@ from dynamic_filters import MemberFilter, PendingFilter
 from callback_types import RegisterVerdict
 
 from uuid import uuid4
+import traceback, html, json
 
+class CustomEncoder(json.JSONEncoder):
+    def default(self, o):
+        try:
+            d = o.__dict__
+        except TypeError:
+            pass
+        else:
+            return d
+        return super().default(o)
 
 async def start(update: Update, context: CustomContext):
     user = update.effective_user
@@ -89,7 +99,7 @@ async def register_verdict(update: Update, context: CustomContext) -> None:
     await context.bot.send_message(user_id, text=msg)
 
 async def admin(update: Update, context: CustomContext) -> None:
-    if not filters.Chat(int(context.config["OWNER"])).check_update(update):
+    if not filters.Chat(int(context.config["OWNER_CHAT_ID"])).check_update(update):
         await update.effective_message.reply_text("Нет прав администратора бота")
         return
     
@@ -183,3 +193,42 @@ async def inline_sharing(update: Update, context: CustomContext):
 
 async def invalid_callback(update: Update, context: CustomContext):
     await update.callback_query.edit_message_reply_markup(None)
+
+async def error_handler(update: object, context: CustomContext) -> None:
+    """Log the error and send a telegram message to notify the developer."""
+    # Log the error before we do anything else, so we can see it even if something breaks.
+    context.logger.error("Exception while handling an update:", exc_info=context.error)
+
+    # traceback.format_exception returns the usual python message about an exception, but as a
+    # list of strings rather than a single string, so we have to join them together.
+    tb_list = traceback.format_exception(None, context.error, context.error.__traceback__)
+    # if len(tb_list) <= 8:
+    tb_string = "".join(tb_list) 
+    # tb_string = "".join(tb_list[:4] + ["-----\ntraceback lines\n-----"] + tb_list[-4:])
+
+    # Build the message with some markup and additional information about what happened.
+    # You might need to add some logic to deal with messages longer than the 4096 character limit.
+    update_str = update.to_dict() if isinstance(update, Update) else str(update)
+    message = (
+        "An exception was raised while handling an update\n"
+        f"<pre>update = {html.escape(json.dumps(update_str, indent=2, ensure_ascii=False, cls=CustomEncoder))}"
+        "</pre>\n\n"
+        f"<pre>context.chat_data = {html.escape(str(context.chat_data))}</pre>\n\n"
+        f"<pre>context.user_data = {html.escape(str(context.user_data))}</pre>\n\n"
+        f"<pre>{html.escape(tb_string)}</pre>"
+    )
+    with open("error_message.html", "w") as file:
+        file.write(message)
+    # Finally, send the message
+    await context.bot.send_document(
+        chat_id=context.config["ERROR_CHAT_ID"], 
+        caption=f"Репорт от @{update.effective_user.username}", 
+        document="error_message.html", parse_mode=ParseMode.HTML
+    )
+
+async def restart(update: Update, context: CustomContext):
+    if (~filters.Chat(int(context.config["OWNER_CHAT_ID"]))).check_update(update):
+        return
+    
+    context.bot_data["restart"] = True
+    context.application.stop_running()

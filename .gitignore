@@ -1,4 +1,6 @@
 thread_members.json
+picklepersistence
+error_message.html
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

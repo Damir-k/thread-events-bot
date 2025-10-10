@@ -1,9 +1,11 @@
 from telegram.ext import (ApplicationBuilder, CommandHandler, 
     CallbackQueryHandler, InlineQueryHandler, ContextTypes, filters, 
-    InvalidCallbackData, ConversationHandler, MessageHandler)
+    InvalidCallbackData, ConversationHandler, MessageHandler,
+    PicklePersistence)
 
 import logging
 from dotenv import dotenv_values
+import os, sys
 
 from handlers import (start, register, register_verdict, 
     admin, inline_sharing, invalid_callback)
@@ -24,6 +26,7 @@ TOKEN = dotenv_values(".env")["TOKEN"]
 
 
 def main(token):
+    my_persistence = PicklePersistence(filepath='picklepersistence')
     context_types = ContextTypes(context=CustomContext)
     application = ApplicationBuilder()\
         .token(f'{token}')\
@@ -31,8 +34,10 @@ def main(token):
         .arbitrary_callback_data(True)\
         .concurrent_updates(False)\
         .build()
+        # .persistence(my_persistence)\
 
-    application.add_handler(CommandHandler('start', start))
+    application.bot_data["restart"] = False
+    application.add_handler(CommandHandler("restart", restart))
     application.add_handler(CommandHandler("admin", admin, ~filters.UpdateType.EDITED))
     
     application.add_handlers([
@@ -54,7 +59,9 @@ def main(token):
                 CallbackQueryHandler(new_event, pattern=r"^edit_event$")
             ]
         },
-        fallbacks=[CommandHandler("cancel_event_creation", cancel_event_creation)]
+        fallbacks=[CommandHandler("cancel_event_creation", cancel_event_creation)],
+        name="event creation"
+        # persistent=True
     ))
     application.add_handler(CallbackQueryHandler(event_verdict, EventVerdict))
     application.add_handler(CallbackQueryHandler(manage_event, ManageEvent))
@@ -70,8 +77,13 @@ def main(token):
 
 
     application.add_handler(InlineQueryHandler(inline_sharing))
+    application.add_error_handler(error_handler)
+    application.add_handler(CommandHandler('start', start))
 
     application.run_polling()
+    if application.bot_data["restart"]:
+        os.system("clear")
+        os.execl(sys.executable, sys.executable, *sys.argv)
 
 
 if __name__ == '__main__':

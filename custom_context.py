@@ -3,6 +3,7 @@ from telegram.ext import CallbackContext, ExtBot
 from dotenv import dotenv_values
 from enum import Enum
 from datetime import date
+import logging
 
 from database import Database
 
@@ -20,6 +21,7 @@ class CustomContext(CallbackContext[ExtBot, dict, None, dict]):
         super().__init__(application, chat_id, user_id)
         self.config = dotenv_values(".env")
         self.database = Database("thread_members.json")
+        self.logger = logging.getLogger()
 
     def get_user_status(self, chat_id) -> str:
         if str(chat_id) in self.database.data["members"]:
