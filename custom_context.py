@@ -14,6 +14,8 @@ class State(Enum):
     DESCRIPTION = 4
     CONFIRM_EVENT = 5
     EXPIRATION_DATE = 6
+    EVENT_AGE = 7
+    EVENT_SIZE = 8
 
 class CustomContext(CallbackContext[ExtBot, dict, None, dict]):
     """Custom class for context."""
@@ -37,7 +39,7 @@ class CustomContext(CallbackContext[ExtBot, dict, None, dict]):
             self.database.data["events"][str(event_id)]["status"] = "expired"
             self.database.save()
         is_author = event["author"] == int(chat_id)
-        is_active = event["status"] == "active"
+        is_active = event["status"] == "active" or event["status"] == "cool"
         return (is_author) or (is_active and not expired)
 
     def get_events(self, chat_id, filter_available=True) -> dict[str, dict]:
