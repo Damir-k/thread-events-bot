@@ -1,12 +1,12 @@
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import (Update, InlineKeyboardMarkup, InlineKeyboardButton, 
+    ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove)
 from telegram.constants import ParseMode
 from telegram.ext import ConversationHandler, filters
 
 from datetime import date
 import re
-from functools import wraps
 
-from custom_context import CustomContext, State
+from custom_context import CustomContext, State, ExactMessages
 from dynamic_filters import MemberFilter
 from callback_types import EventVerdict, ShowEvent, ManageEvent, EditEvent
 
@@ -44,10 +44,15 @@ async def new_event(update: Update, context: CustomContext):
     if update.callback_query:
         await update.callback_query.answer()
         await update.callback_query.edit_message_reply_markup(None)
+        await update.effective_user.send_message(
+            text="<i>Готовимся к созданию...</i>", 
+            reply_markup=ReplyKeyboardRemove(),
+            parse_mode=ParseMode.HTML
+        )
     if (~MemberFilter(context.database)).check_update(update):
         await update.effective_message.reply_text("Зарегистрируйтесь через /register, чтобы создать мероприятие")
         return ConversationHandler.END
-
+    context.logger.warning(f"@{update.effective_user.username} creating event")
     new_event_text = "\n".join([
         "<b>Ура! Создаём новое событие</b> 😌 ",
         ""
@@ -64,13 +69,18 @@ async def new_event(update: Update, context: CustomContext):
     if "event_name" in context.user_data:
         edit_event_text = f"\n<i>[Сохранено]</i><blockquote>{context.user_data["event_name"]}</blockquote>"
         txt = mid_txt + "\n" + edit_event_text
-        markup = InlineKeyboardMarkup([[InlineKeyboardButton(
+        keyboard = [[InlineKeyboardButton(
             "Оставить текущее название",
             callback_data="keep_event_name"
-        )]])
+        )]]
     else:
         txt = new_event_text + "\n" + mid_txt
-        markup = None
+        keyboard = []
+    keyboard.append([InlineKeyboardButton(
+        "Отменить создание мероприятия", 
+        callback_data="cancel_event_creation"
+    )])
+    markup = InlineKeyboardMarkup(keyboard)
     await update.effective_user.send_message(txt, parse_mode=ParseMode.HTML, reply_markup=markup)
     return State.EVENT_NAME
 
@@ -84,13 +94,18 @@ async def get_event_name(update: Update, context: CustomContext):
     if "location" in context.user_data:
         edit_event_text = f"\n<i>[Сохранено]</i><blockquote>{context.user_data["location"]}</blockquote>"
         txt = mid_txt + "\n" + edit_event_text
-        markup = InlineKeyboardMarkup([[InlineKeyboardButton(
+        keyboard = [[InlineKeyboardButton(
             "Оставить текущее место",
             callback_data="keep_location"
-        )]])
+        )]]
     else:
         txt = mid_txt
-        markup = None
+        keyboard = []
+    keyboard.append([InlineKeyboardButton(
+        "Отменить создание мероприятия", 
+        callback_data="cancel_event_creation"
+    )])
+    markup = InlineKeyboardMarkup(keyboard)
     await update.effective_user.send_message(txt, parse_mode=ParseMode.HTML, reply_markup=markup)
     return State.LOCATION
 
@@ -104,13 +119,18 @@ async def get_event_location(update: Update, context: CustomContext):
     if "datetime" in context.user_data:
         edit_event_text = f"\n<i>[Сохранено]</i><blockquote>{context.user_data["datetime"]}</blockquote>"
         txt = mid_txt + "\n" + edit_event_text
-        markup = InlineKeyboardMarkup([[InlineKeyboardButton(
+        keyboard = [[InlineKeyboardButton(
             "Оставить текущее время",
             callback_data="keep_datetime"
-        )]])
+        )]]
     else:
         txt = mid_txt
-        markup = None
+        keyboard = []
+    keyboard.append([InlineKeyboardButton(
+        "Отменить создание мероприятия", 
+        callback_data="cancel_event_creation"
+    )])
+    markup = InlineKeyboardMarkup(keyboard)
     await update.effective_user.send_message(txt, parse_mode=ParseMode.HTML, reply_markup=markup)
     return State.DATE_TIME
 
@@ -124,13 +144,18 @@ async def get_event_datetime(update: Update, context: CustomContext):
     if "age" in context.user_data:
         edit_event_text = f"\n<i>[Сохранено]</i><blockquote>{context.user_data["age"]}</blockquote>"
         txt = mid_txt + "\n" + edit_event_text
-        markup = InlineKeyboardMarkup([[InlineKeyboardButton(
+        keyboard = [[InlineKeyboardButton(
             "Оставить текущий возраст",
             callback_data="keep_event_age"
-        )]])
+        )]]
     else:
         txt = mid_txt
-        markup = None
+        keyboard = []
+    keyboard.append([InlineKeyboardButton(
+        "Отменить создание мероприятия", 
+        callback_data="cancel_event_creation"
+    )])
+    markup = InlineKeyboardMarkup(keyboard)
     await update.effective_user.send_message(txt, parse_mode=ParseMode.HTML, reply_markup=markup)
     return State.EVENT_AGE 
 
@@ -144,13 +169,18 @@ async def get_event_age(update: Update, context: CustomContext):
     if "size" in context.user_data:
         edit_event_text = f"\n<i>[Сохранено]</i><blockquote>{context.user_data["size"]}</blockquote>"
         txt = mid_txt + "\n" + edit_event_text
-        markup = InlineKeyboardMarkup([[InlineKeyboardButton(
+        keyboard = [[InlineKeyboardButton(
             "Оставить текущее количество человек",
             callback_data="keep_event_size"
-        )]])
+        )]]
     else:
         txt = mid_txt
-        markup = None
+        keyboard = []
+    keyboard.append([InlineKeyboardButton(
+        "Отменить создание мероприятия", 
+        callback_data="cancel_event_creation"
+    )])
+    markup = InlineKeyboardMarkup(keyboard)
     await update.effective_user.send_message(txt, parse_mode=ParseMode.HTML, reply_markup=markup)
     return State.EVENT_SIZE
 
@@ -169,13 +199,18 @@ async def get_event_size(update: Update, context: CustomContext):
     if "expiration_date" in context.user_data:
         edit_event_text = f"\n<i>[Сохранено]</i><blockquote>{context.user_data["expiration_date"]}</blockquote>"
         txt = mid_txt + "\n" + edit_event_text
-        markup = InlineKeyboardMarkup([[InlineKeyboardButton(
+        keyboard = [[InlineKeyboardButton(
             "Оставить текущий срок годности",
             callback_data="keep_expiration_date"
-        )]])
+        )]]
     else:
         txt = mid_txt
-        markup = None
+        keyboard = []
+    keyboard.append([InlineKeyboardButton(
+        "Отменить создание мероприятия", 
+        callback_data="cancel_event_creation"
+    )])
+    markup = InlineKeyboardMarkup(keyboard)
     await update.effective_user.send_message(txt, parse_mode=ParseMode.HTML, reply_markup=markup)
     return State.EXPIRATION_DATE
 
@@ -194,13 +229,18 @@ async def get_event_expiration_date(update: Update, context: CustomContext):
     if "description" in context.user_data:
         edit_event_text = f"\n<i>[Сохранено]</i><blockquote>{context.user_data["description"]}</blockquote>"
         txt = mid_txt + "\n" + edit_event_text
-        markup = InlineKeyboardMarkup([[InlineKeyboardButton(
+        keyboard = [[InlineKeyboardButton(
             "Оставить текущее описание",
             callback_data="keep_description"
-        )]])
+        )]]
     else:
         txt = mid_txt
-        markup = None
+        keyboard = []
+    keyboard.append([InlineKeyboardButton(
+        "Отменить создание мероприятия", 
+        callback_data="cancel_event_creation"
+    )])
+    markup = InlineKeyboardMarkup(keyboard)
     await update.effective_user.send_message(txt, parse_mode=ParseMode.HTML, reply_markup=markup)
     return State.DESCRIPTION
 
@@ -215,10 +255,13 @@ async def get_event_description(update: Update, context: CustomContext):
         "",
         get_event_summary(context.user_data)
     ])
-    markup = InlineKeyboardMarkup([[
+    keyboard = [[
         InlineKeyboardButton("Да, всё верно", callback_data="confirm_event"),
         InlineKeyboardButton("Нет, хочу кое-что изменить", callback_data="edit_event")
-    ]])
+    ],
+    [InlineKeyboardButton("Отменить создание мероприятия", callback_data="cancel_event_creation")]
+    ]
+    markup = InlineKeyboardMarkup(keyboard)
     await update.effective_user.send_message(txt, parse_mode=ParseMode.HTML, reply_markup=markup)
     return State.CONFIRM_EVENT
 
@@ -244,6 +287,15 @@ async def confirm_event(update: Update, context: CustomContext):
         get_event_summary(event)
     ])
     await update.callback_query.edit_message_text(txt, parse_mode=ParseMode.HTML)
+    
+    keyboard = [[
+        KeyboardButton(ExactMessages.MAIN_MENU.value)
+    ]]
+    markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    await update.effective_user.send_message(
+        "Вы можете посмотреть текущие активные мероприятия с помощью /list_events",
+        reply_markup=markup
+    )
 
     context.database.data["events"][str(event_id)] = event
     context.database.data["members"][str(update.effective_user.id)]["events"].append(event_id)
@@ -270,8 +322,16 @@ async def confirm_event(update: Update, context: CustomContext):
     return ConversationHandler.END
 
 async def cancel_event_creation(update: Update, context: CustomContext):
-    await update.message.reply_text("Создание мероприятия отменено")
+    if update.callback_query:
+        await update.callback_query.answer()
+        await update.callback_query.edit_message_reply_markup(None)
+    context.logger.info(f"@{update.effective_user.username} - Создание мероприятия отменено")
     context.user_data.clear()
+    keyboard = [[
+        KeyboardButton(ExactMessages.MAIN_MENU.value)
+    ]]
+    markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    await update.effective_user.send_message("Создание мероприятия отменено", reply_markup=markup)
     return ConversationHandler.END
 
 async def event_verdict(update: Update, context: CustomContext):
@@ -290,6 +350,7 @@ async def event_verdict(update: Update, context: CustomContext):
     db.save()
     await update.callback_query.edit_message_text(msg_admin)
     await context.bot.send_message(event["author"], msg_admin)
+    context.logger.info(msg_admin)
 
 async def list_events(update: Update, context: CustomContext):
     if update.callback_query:
@@ -417,6 +478,7 @@ async def manage_event(update: Update, context: CustomContext):
     action = query.data.action
     db = context.database
     event = db.data["events"][event_id]
+    context.logger.info(f"@{query.from_user.username} - manage event {event_id}")
 
     if action == "show_subs":
         subs = event.setdefault("subs", [event["author"]])
@@ -484,13 +546,20 @@ async def edit_event(update: Update, context: CustomContext):
     if mode == "cancel":
         return
     if mode == "delete":
+        context.logger.warning(f"@{query.from_user.username} - delete event {event_id}")
         await context.bot.delete_message(chat_id, message_id)
         event = db.data["events"].pop(event_id)
         db.save()
         await query.from_user.send_message(f"<b>Мероприятие удалено:</b>\n{event["event_name"]}", parse_mode=ParseMode.HTML)
         return
     if mode == "edit":
+        context.logger.warning(f"@{query.from_user.username} - edit event {event_id}")
         await context.bot.edit_message_reply_markup(chat_id, message_id, reply_markup=None)
+        await update.effective_user.send_message(
+            text="<i>Готовимся к изменению...</i>", 
+            reply_markup=ReplyKeyboardRemove(),
+            parse_mode=ParseMode.HTML
+        )
         event = db.data["events"][event_id]
         context.user_data.update(event)
         context.user_data["event_id"] = int(event_id)
@@ -505,10 +574,11 @@ async def edit_event(update: Update, context: CustomContext):
             "",
             f"<i>[Сохранено]</i><blockquote>{context.user_data["event_name"]}</blockquote>"
         ])
-        markup = InlineKeyboardMarkup([[InlineKeyboardButton(
-            "Оставить текущее название",
-            callback_data="keep_event_name"
-        )]])
+        keyboard = [
+            [InlineKeyboardButton("Оставить текущее название", callback_data="keep_event_name")],
+            [InlineKeyboardButton("Отменить изменение мероприятия", callback_data="cancel_event_creation")]
+        ]
+        markup = InlineKeyboardMarkup(keyboard)
         await update.effective_user.send_message(txt, parse_mode=ParseMode.HTML, reply_markup=markup)
         return State.EVENT_NAME
 

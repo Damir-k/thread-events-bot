@@ -17,6 +17,9 @@ class State(Enum):
     EVENT_AGE = 7
     EVENT_SIZE = 8
 
+class ExactMessages(Enum):
+    MAIN_MENU = "Вернуться в главное меню"
+
 class CustomContext(CallbackContext[ExtBot, dict, None, dict]):
     """Custom class for context."""
     def __init__(self, application, chat_id = None, user_id = None):

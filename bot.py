@@ -14,7 +14,7 @@ from event_handlers import (new_event, list_events, get_event_name,
     cancel_event_creation, event_verdict, get_event_expiration_date, show_event,
     list_every_event, get_event_age, get_event_size, manage_event, edit_event)
 
-from custom_context import CustomContext, State
+from custom_context import CustomContext, State, ExactMessages
 from callback_types import RegisterVerdict, EventVerdict, ShowEvent, ManageEvent, EditEvent
 
 logging.basicConfig(
@@ -86,7 +86,10 @@ def main(token):
                 CallbackQueryHandler(new_event, pattern=r"^edit_event$")
             ]
         },
-        fallbacks=[CommandHandler("cancel_event_creation", cancel_event_creation)],
+        fallbacks=[
+            CommandHandler("cancel_event_creation", cancel_event_creation),
+            CallbackQueryHandler(cancel_event_creation, pattern=r"^cancel_event_creation$")
+        ],
         name="event creation"
         # persistent=True
     ))
@@ -102,9 +105,13 @@ def main(token):
     application.add_handler(CallbackQueryHandler(register_verdict, RegisterVerdict))
     application.add_handler(CallbackQueryHandler(invalid_callback, InvalidCallbackData))
 
-    application.add_handler(InlineQueryHandler(inline_sharing))
+    # application.add_handler(InlineQueryHandler(inline_sharing))
     application.add_error_handler(error_handler)
-    application.add_handler(CommandHandler('start', start))
+    application.add_handlers([
+        CommandHandler('start', start),
+        CommandHandler("menu", start),
+        MessageHandler(filters.Text([ExactMessages.MAIN_MENU.value]) & ~filters.COMMAND, start)
+    ])
 
     application.run_polling()
     if application.bot_data["restart"]:

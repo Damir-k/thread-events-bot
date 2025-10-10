@@ -74,6 +74,7 @@ async def register(update: Update, context: CustomContext):
     ]]
     markup = InlineKeyboardMarkup(keyboard)
     msg = f"@{username} - {name} хочет получить доступ к мероприятиям Нити"
+    context.logger.info(msg)
     await context.bot.send_message(chat_id=int(context.config["ADMIN_CHAT_ID"]), text=msg, reply_markup=markup)
     context.database.save_entry("pending", user_id, username, name)
 
