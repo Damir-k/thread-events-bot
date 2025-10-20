@@ -39,6 +39,7 @@ def main(token):
 
     application.bot_data["update"] = False
     application.bot_data["restart"] = False
+    application.bot_data["ERROR_CHAT_ID"] = dotenv_values(".env")["ERROR_CHAT_ID"]
     application.add_handler(CommandHandler("update", update_bot))
     application.add_handler(CommandHandler("restart", restart))
     application.add_handler(CommandHandler("admin", admin, ~filters.UpdateType.EDITED))

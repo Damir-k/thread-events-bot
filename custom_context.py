@@ -25,7 +25,6 @@ class CustomContext(CallbackContext[ExtBot, dict, None, dict]):
     def __init__(self, application, chat_id = None, user_id = None):
         super().__init__(application, chat_id, user_id)
         self.config = dotenv_values(".env")
-        application.bot_data["ERROR_CHAT_ID"] = self.config["ERROR_CHAT_ID"]
         self.database = Database("thread_members.json")
         self.logger = logging.getLogger()
 
