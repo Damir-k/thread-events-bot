@@ -2,7 +2,7 @@ from telegram import (Update, InlineKeyboardButton, InlineKeyboardMarkup,
     InlineQueryResultArticle, InputTextMessageContent, InlineQueryResultsButton,
     KeyboardButton)
 from telegram.constants import ParseMode
-from telegram.ext import filters
+from telegram.ext import filters, Application
 
 from custom_context import CustomContext
 from dynamic_filters import MemberFilter, PendingFilter
@@ -233,3 +233,25 @@ async def restart(update: Update, context: CustomContext):
     
     context.bot_data["restart"] = True
     context.application.stop_running()
+
+async def update_bot(update: Update, context: CustomContext):
+    if (~filters.Chat(int(context.config["OWNER_CHAT_ID"]))).check_update(update):
+        return
+    
+    context.bot_data["update"] = True
+
+async def post_stop_callback(application: Application):
+    await application.bot.send_document(
+        application.bot_data["ERROR_CHAT_ID"], 
+        "thread_members.json", 
+        caption="Бот был остановлен штатно :)\nбаза данных на момент закрытия прикладывается"        
+    )
+
+async def set_database(update: Update, context: CustomContext):
+    if (~filters.Chat(int(context.config["OWNER_CHAT_ID"]))).check_update(update):
+        return
+    context.logger.info("перезапись базы данных")
+    filename = "tmp.json"
+    file = await update.message.document.get_file()
+    path = await file.download_to_drive(filename)
+    context.database.load_from_file(path)

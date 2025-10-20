@@ -3,17 +3,9 @@ import json
 
 class Database:
     def __init__(self, filename: str):
-        with open(filename, "r") as file:
-            self.data: dict[int, dict] = json.load(file)
         self.filename = filename
-        if "members" not in self.data:
-            self.data["members"] = dict()
-        if "pending" not in self.data:
-            self.data["pending"] = dict()
-        if "events" not in self.data:
-            self.data["events"] = dict()
-        if "_last_event_id" not in self.data:
-            self.data["_last_event_id"] = 1
+        self.load_from_file(filename)
+        
 
     def save(self):
         with open(self.filename, "w") as file:
@@ -39,3 +31,23 @@ class Database:
         self.data["_last_event_id"] += 1
         self.save()
         return self.data["_last_event_id"]
+    
+    def load_from_file(self, filename):
+        try:
+            with open(filename, "r") as file:
+                self.data: dict[int, dict] = json.load(file)
+        except FileNotFoundError:
+            with open(filename, "w") as file:
+                file.write("{}")
+            self.data = dict()
+        if "members" not in self.data:
+            self.data["members"] = dict()
+        if "pending" not in self.data:
+            self.data["pending"] = dict()
+        if "events" not in self.data:
+            self.data["events"] = dict()
+        if "ids" not in self.data:
+            self.data["ids"] = dict()
+        if "_last_event_id" not in self.data:
+            self.data["_last_event_id"] = 1
+        self.save()

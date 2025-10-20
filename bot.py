@@ -8,7 +8,8 @@ from dotenv import dotenv_values
 import os, sys
 
 from handlers import (start, register, register_verdict, 
-    admin, inline_sharing, invalid_callback, error_handler, restart)
+    admin, inline_sharing, invalid_callback, error_handler, restart, update_bot,
+    post_stop_callback, set_database)
 from event_handlers import (new_event, list_events, get_event_name, 
     get_event_location, get_event_datetime, get_event_description, confirm_event,
     cancel_event_creation, event_verdict, get_event_expiration_date, show_event,
@@ -36,9 +37,16 @@ def main(token):
         .build()
         # .persistence(my_persistence)\
 
+    application.bot_data["update"] = False
     application.bot_data["restart"] = False
+    application.add_handler(CommandHandler("update", update_bot))
     application.add_handler(CommandHandler("restart", restart))
     application.add_handler(CommandHandler("admin", admin, ~filters.UpdateType.EDITED))
+    application.add_handler(MessageHandler(
+        filters.Document.FileExtension("json") &
+        filters.Caption(["database"]),
+        set_database
+    ))
     
     application.add_handlers([
         CommandHandler('register', register),
@@ -113,11 +121,14 @@ def main(token):
         MessageHandler(filters.Text([ExactMessages.MAIN_MENU.value]) & ~filters.COMMAND, start)
     ])
 
+    application.post_stop = post_stop_callback
     application.run_polling()
+    
+    if application.bot_data["update"]:
+        os.system("git pull -p")
     if application.bot_data["restart"]:
         os.system("clear")
         os.execl(sys.executable, sys.executable, *sys.argv)
-
 
 if __name__ == '__main__':
     main(TOKEN)
